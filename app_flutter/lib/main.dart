@@ -1,122 +1,172 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const CustodiApp());
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class CustodiApp extends StatelessWidget {
+  const CustodiApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'I Custodi del DNA',
+      theme: ThemeData(useMaterial3: true),
+      home: const NewsPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
+class WpPost {
+  final int id;
   final String title;
+  final String excerpt;
+  final DateTime date;
+  final String link;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  WpPost({
+    required this.id,
+    required this.title,
+    required this.excerpt,
+    required this.date,
+    required this.link,
+  });
+
+  factory WpPost.fromJson(Map<String, dynamic> json) {
+    String plain(String html) =>
+        html.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('&nbsp;', ' ').trim();
+
+    return WpPost(
+      id: json['id'] as int,
+      title: plain((json['title']?['rendered'] ?? '').toString()),
+      excerpt: plain((json['excerpt']?['rendered'] ?? '').toString()),
+      date: DateTime.tryParse((json['date'] ?? '').toString()) ?? DateTime.now(),
+      link: (json['link'] ?? '').toString(),
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class NewsPage extends StatefulWidget {
+  const NewsPage({super.key});
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  State<NewsPage> createState() => _NewsPageState();
+}
+
+class _NewsPageState extends State<NewsPage> {
+  static const _base = 'https://www.icustodideldna.it';
+  late Future<List<WpPost>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = fetchPosts();
+  }
+
+  Future<List<WpPost>> fetchPosts() async {
+    final uri = Uri.parse('$_base/wp-json/wp/v2/posts?per_page=10');
+    final res = await http.get(uri, headers: {'Accept': 'application/json'});
+    if (res.statusCode != 200) {
+      throw Exception('WordPress API error: ${res.statusCode}\n${res.body}');
+    }
+    final list = (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+    return list.map(WpPost.fromJson).toList();
+  }
+
+  Future<void> _open(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final df = DateFormat('d MMM yyyy');
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('News — I Custodi del DNA'),
+        actions: [
+          IconButton(
+            tooltip: 'Apri sito',
+            onPressed: () => _open('$_base/'),
+            icon: const Icon(Icons.public),
+          )
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: FutureBuilder<List<WpPost>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Errore nel caricare i post.'),
+                  const SizedBox(height: 8),
+                  Text(snapshot.error.toString()),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => setState(() => _future = fetchPosts()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Riprova'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final posts = snapshot.data ?? const <WpPost>[];
+          if (posts.isEmpty) {
+            return const Center(child: Text('Nessun articolo trovato.'));
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async => setState(() => _future = fetchPosts()),
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(12),
+              itemCount: posts.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final p = posts[i];
+                return Card(
+                  child: ListTile(
+                    title: Text(
+                      p.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 6),
+                        Text(df.format(p.date)),
+                        if (p.excerpt.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            p.excerpt,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _open(p.link),
+                  ),
+                );
+              },
             ),
-          ],
-        ),
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
